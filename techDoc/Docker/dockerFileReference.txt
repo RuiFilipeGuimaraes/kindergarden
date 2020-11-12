@@ -1,0 +1,264 @@
+Technicall resume of docker file reference and concepts
+
+Useful links:
+-> best practices for writting docker files: https://docs.docker.com/develop/develop-images/dockerfile_best-practices/
+
+#DOCKER FILE STRUCTURE
+A docker file is structure in the following way:
+
+{
+	<ARGS>	
+}
+FROM <baseImage>
+{
+	<INSTRUCTIONS>
+}
+
+Example:
+
+# Use the official image as a parent image.
+FROM node:current-slim
+
+# Set the working directory.
+WORKDIR /usr/src/app
+
+# Copy the file from your host to your current location.
+COPY package.json .
+
+# Run the command inside your image filesystem.
+RUN npm install
+
+# Add metadata to the image to describe which port the container is listening on at runtime.
+EXPOSE 8080
+
+# Run the specified command within the container.
+CMD [ "npm", "start" ]
+
+# Copy the rest of your app's source code from your host to your image filesystem.
+COPY . .
+
+
+__________________________________________________________________________________________________________________________________________
+#List of instructions:
+
+#COPY
+-> COPY <src> <dest>
+
+Copy a file from host <src> directory location to the image's OS location <dest>. For examples, see ADD command as it's similar.
+
+__________________________________________________________________________________________________________________________________________
+#ENV
+-> ENV <variable> <value>
+-> ENV <variable>="<value>"
+
+Declare and set/replace an environment variable. Following instructions in the DockerFile can use that variable and it will also be defined in the guest OS.
+
+#HOW TO USE VARIABLES IN DOCKER FILE
+
+${variable_name} -> use variable's value if it was set
+${variable:-<defaultValue>} -> use variable's value or the <defaulValue> if it wasn't set
+${variable:+<replacementValue} -> if variable is set, use the <replacementValue>. If it wasn't, the default value is an empty string.
+
+__________________________________________________________________________________________________________________________________________
+#RUN
+-> RUN <command>
+-> RUN ["<executable>", "<param1>", ... , "paramN"]
+
+Creates a new layer over the image, performing the changes and commiting them.
+
+Examples:
+
+1) Shell form:
+
+RUN /bin/bash -c 'echo hello'
+
+or with escaping for multiple lines...
+
+RUN /bin/bash -c 'echo \
+hello'
+
+2) Exec form:
+RUN ["/bin/bash", "-c", "echo hello"]
+
+
+# EXEC FORM vs SHELL FORM
+-> Shell form uses the defined guest OS's shell to run the commands. The shell is responsible of, for example, replace env variables. This feature is not present in the exec form, although this on has the advantage of not needing a shell and define directly the command executable to run. To take advantage of ENV replacement, exec form can always call explicitly the shell, making the call equivalent to the shell form. E.g:
+
+RUN echo "hello world" 
+is equivalent to
+RUN ["/bin/bash", "-c", "echo hello world"]
+
+__________________________________________________________________________________________________________________________________________
+#CMD
+Provide defaults for an executing container
+Only can be defined one for each Docker file. If more than one CMD instruction is defined, only the last is used.
+
+Examples:
+
+-> CMD ["executable", "param1", "paramN"] -> Exec form
+
+-> CMD ["param1", "paramN"] -> As default params to ENTRYPOINT
+
+-> CMD <command> <param1> <paramN> -> Shell form
+
+__________________________________________________________________________________________________________________________________________
+#LABEL
+Adds metadata to an image
+
+-> LABEL <key>=<value>
+
+Ex:
+LABEL "com.example.vendor"="ACME Inc."
+LABEL "version"="1.2.3"
+
+__________________________________________________________________________________________________________________________________________
+#EXPOSE
+Informs docker that the container listens on the specified network ports at runtime. TCP is the default protocol value but UDP can also be defined
+
+-> EXPOSE <port>
+-> EXPOSE <port>/<protocol>
+
+Ex:
+
+EXPOSE 80
+EXPOSE 80/udp
+EXPOSE 8080/tcp
+
+__________________________________________________________________________________________________________________________________________
+#ADD
+
+Similar to COPY. Additionaly, has the feature of unzipping host files to guest's directory
+
+-> ADD [--chown=<user>:<group>] <source> <destination>
+-> ADD [--chown=<user>:<group>] ["<source>", "<destination>"]
+
+Ex:
+
+1) ADD hom* /myDir/ 
+ 
+Adds all files starting with "hom" of the host's directory to the guest's /myDir directory
+
+2) ADD text.txt /myDir/
+
+Adds "text.txt" file to the guest's /myDir directory
+
+3) ADD text.txt myDir/
+
+Adds "text.txt" file to the <WORKDIR>/myDir guest's directory
+
+__________________________________________________________________________________________________________________________________________
+#ENTRYPOINT
+
+Configure a container that will run as an executable
+
+-> ENTRYPOINT ["executable", "param1", "paramN"]
+-> ENTRYPOINT <command> <param1> <paramN>
+
+__________________________________________________________________________________________________________________________________________
+#VOLUME
+
+Mechanism to persist data generated by a container to the host's filesystem
+
+-> VOLUME ["<volume>"]
+
+Ex: VOLUME ["/data"]
+
+Complete example:
+
+{
+	FROM Ubuntu
+	RUN mkdir /myVol
+	RUN echo "hello world" > myVol/greeting
+	VOLUME /myVol	
+}
+
+
+Then on the host machine we can inspect the volume and retrieve it's information
+
+__________________________________________________________________________________________________________________________________________
+#USER
+
+Sets the username/group to use when running the image and for any RUN, CMD or ENTRYPOINT command
+
+-> USER <user>[:<group>]
+-> USER <userId>[<groupId>]
+
+__________________________________________________________________________________________________________________________________________
+#WORKDIR
+
+Sets the working directory for any RUN, ADD, COPY, CMD and ENTRYPOINT command
+
+-> WORKDIR /path
+
+Path can be:
+- Absolute -> uses the absolute path
+- Relative -> set's the workdir as relative to the old workdir directory
+
+__________________________________________________________________________________________________________________________________________
+#ARG
+
+Defines a variable that the user can pass at build time with the docker BUILD command: "docker build ... -arg <arg>=<value>"
+
+-> ARG <name>[=<defaultValue>]
+
+Note that arg values are not persisted in the built image!
+
+__________________________________________________________________________________________________________________________________________
+#ONBUILD
+
+Adds to the image a trigger instruction that is executed when the image is used as base image of another one
+
+-> ONBUILD <instruction>
+
+__________________________________________________________________________________________________________________________________________
+#STOPSIGNAL
+
+Sets the system call signal to be sent to stop the container execution
+
+-> STOPSIGNAL <signal>
+
+__________________________________________________________________________________________________________________________________________
+#HEALTHCHECK
+
+Tells docker how to test a container to check if it is still working. 
+Only one instruction of this type is allowed by DockerFile. If more than one, only the last is used.
+
+Example: Set healthcheck commands
+-> HEALTHCHECK [<options>] CMD <command>
+
+Example: Disable any healthcheck inherit from base image
+-> HEALTHCHECK NONE
+
+Valid list of <options> is:
+-> --interval=<duration> (default = 30s)
+-> --timeout=<duration> (default = 30s)
+-> --start-period=<duration> (default = 0s)
+-> --retries=<value> (default = 3)
+
+Examples:
+
+-> HEALTHCHECK CMD /bin/check-running
+-> HEALTHCHECK CMD ["/bin/check-running"]
+
+
+The healthcheck command's exit states are:
+- 0 : SUCCESS -> the container is healthy
+- 1 : UNHEALTHY -> the container is not ok
+- 2 : RESERVED -> do not use this exit code
+
+Specific example: Check every 5 mintues that an webserver is able to serve the site's main page within 3s:
+-> HEALTHCHECK --interval=5m --timeout=3s CMD curl -f http://localhost/ || exit 1
+
+__________________________________________________________________________________________________________________________________________
+#SHELL
+
+Allows default shell used for the shell form of commands to be overriden
+The default shell is the following:
+- Linux -> ["/bin/sh", "-c"]
+- Windows -> ["cmd", "/S", "/C"]
+
+-> SHELL ["executable", "parameter"]
+
+
+
+

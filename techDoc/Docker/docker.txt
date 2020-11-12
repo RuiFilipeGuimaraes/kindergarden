@@ -1,0 +1,108 @@
+Tecnical resume of docker commands and tutorials.
+
+
+
+docker run <image>
+-> Create a container (instance) based on that image
+
+docker images
+-> display installed images
+
+docker run -it <image> 
+-> run a container based on that image in interactive mode
+
+docker rmi <image_id>
+-> remove image from the system
+
+docker inspect <image>
+-> see details regarding the image
+
+docker run -it <image> /bin/bash
+-> run a container in interactive mode and connect to it's shell
+
+docker ps 
+-> list containers on the machine that are running
+
+docker ps -a
+-> list all containers installed in the machine
+
+docker history <image_id> 
+-> history of all commands run with that container
+
+docker top <containerId>
+-> see top processes within a container
+
+docker stop <containerId>
+-> stop a container
+
+docker rm <containerId> 
+-> remove a container
+
+docker stats <containerId>
+-> info of running container
+
+docker attach <containerId>
+-> connect to a running container
+
+docker pause <containerId>
+-> pause all processes within a container
+
+docker unpause <containerId>
+-> unpause processes of a container
+
+docker kill <containerId>
+-> kill all processes within a container
+
+service docker [stop | start]
+-> stop/start docker daemon service
+
+docker exec <containerId> <path>
+-> attach to a container and connect to a specific path. E.g: "docker exec 123 /bin/bash"
+
+docker build -t <imageName>:<tagName> <dir>
+-> build a new docker image based on a custom docker file in the <dir> diretory, with name = <imageName> and tag = <tagName>
+
+docker build -t <pathToDockerFile> .
+-> build an image from current directory context and a custom docker file located in <pathToDockerFile>
+
+docker build -t <pathToDockerFile> <baseDirectory>
+-> build an image from <baseDirectory> directory context and a custom docker file located in <pathToDockerFile>
+
+docker run -p [hostPort]:[containerPort] <image>
+-> create a container from the image and map host ports to exposed ports. Exposed ports available can be found with the docker inspect command over the image. E.g: "docker run -p 8080:8080 -p 5000:5000 <image>". To see available ports: "docker inspect <image> | grep port".
+
+docker exec -it <container> bash
+-> run a bash shell within a container OS
+
+docker exec <container> <command>
+-> execute a command on the container OS
+
+docker run -d -v <hostDir>:<guestDir> <image>
+-> run a containr mapping host <hostDir> folder to guest's <guestDir> folder. E.g: "docker run -d -v /home/demo:/var/jenkins_home -p 8080:8080 jenkins" runs a container mapping host OS folder /home/demo to container folder /var/jenkins_home and host's port 8080 to guest's port 8080.
+
+docker volume ls
+-> list docker volumes
+
+docker network ls
+-> list networks on the docker host
+
+docker network inspect <networkName>
+-> Inspect specific network details
+
+docker network create --driver <driver> <name>
+-> Create a custom network. E.g.: driver = bridge.
+
+docker run -it --network=<customNetwork> <image>
+-> run a container attached to a specific network.
+
+docker logs <container>
+-> inspect logs of a specific container
+
+#change docker service log level:
+1: stop the service
+-> sudo service docker stop
+2: start the service with the desired log level (one of [debug, info, error, fatal])
+-> sudo docker -l <level> &
+
+
+
