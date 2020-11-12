@@ -1,1 +1,1 @@
-docker run -p 8080:8080 -t springio/gs-spring-boot-docker --link redis-postal-codes:redis  &
+docker run -p 8080:8080 -t image_poc_akka_spring --link redis-postal-codes:redis  &

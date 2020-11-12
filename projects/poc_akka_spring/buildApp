@@ -1,1 +1,1 @@
-docker build -t springio/gs-spring-boot-docker .
+docker build -t image_poc_akka_spring .
