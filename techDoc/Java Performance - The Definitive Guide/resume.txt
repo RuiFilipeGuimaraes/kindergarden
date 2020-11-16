@@ -1,0 +1,676 @@
+
+Index
+__________________________________________________________________________________________________________________
+
+* Benchmarking
+    * MicroBenchmark
+    * MacroBenchMark
+    * MesoBenchmark
+* How to interpret performance analysis
+    * CPU, DISK, NETWORK usage, etc 
+* Performance testing
+    * ThroughPut tests
+    * Response Time tests
+    * Hypotheses Tests to assert a performance difference was achieved or not
+* JDK tools to analyse performance
+* Interpreted vs Compiled Languages
+    * Definition
+    * How JAVA stands for this
+    * The JIT compiler
+        * How does it work
+        * Client vs Server (Hot Spot version) vs Tiered Compiler
+        * The code cache
+        * Compilation Thresholds (90)
+        * Standard compilation vs OSR (on stack replacement) (91)
+        * JIT optimisation techniques
+            * Inlining (98)
+            * Escape Analysis (99)
+            * Profile Feedback
+            * Deoptimization (100)
+    * JVM Reserved versus Allocated Memory
+* Garbage Collector
+    * Serial Collector (110)
+    * Parallel/Throughput Collector
+    * Concorrent Collectors (perform the full GC without stoping the world, at cost of using more CPU when doing it)
+        * CMS Collector
+        * G1 Collector 
+    * CMS and G1: what is a concurrent mode failure and when that happens (117)
+    * Choosing between Throughput and CMS (116)
+    * Choosing between CMS and G1 (117)
+    * What is stop-the-world event
+    * Java Heap Structure
+    * Minor GC vs Full GC
+    * Tuning the Garbage Collector
+        * Sizing the heap size (120)
+        * Sizing the generations (121)
+        * Sizing PermGen (java 7) and Metaspace (java 8 ) (122)
+    * GC analysis tools
+        * GC Histogram (126)
+        * Jvisualvm 
+        * jstat (129)
+    * GC alghorithms explained with detail
+        * Understanding the Throughput Collector (130)
+            * Two operations
+                * Minor GC
+                * Full gc
+            * How sizing the heap or the ration between young and old generation impacts the GC performance
+        * Understanding the CMS collector (134)
+        * Understanding the G1 Collector (144)
+    * Tunning G1 Collector
+        * TLAB (156)
+        * G1 allocation for humongous objects (161)
+    * Garbage Collectors Configuration Summary FAQ (164)
+* Heap Memory Best Practices (166)
+* Native Memory Best practices (205)
+* ThreadPoolExecuter, Threading and Synchronization performance (219)
+
+………………………………………………………………………………………………………………………………………………………
+
+Understanding the Throughput Collector (130)
+__________________________________________________________________________________________________________________
+* Two operations
+    * Minor GC
+    * Full gc
+* How sizing the heap or the ration between young and old generation impacts the GC performance
+
+
+………………………………………………………………………………………………………………………………………………………
+Understanding the CMS Collector (134)
+__________________________________________________________________________________________________________________
+
+* Three operations
+    * Minor gc
+    * CMS algorithm to purge data from the old generation
+        * Initial mark phase (stop-of-the-world)
+        * Mark phase (concurrent with app threads)
+        * Pre-clean phase (concurrent with app threads)
+        * Remark Phase (multiple operations)
+            * Concurrent abortable pre-clean phase (concurrent with app threads)
+            * Remark phase (stop of the world)
+        * Sweep phase (concurrent)
+        * Concurrent Reset phase (concurrent)
+    * Full gc when needed
+
+Problems
+* Concurrent mode failure -> happens when a young collection happens and there is no enough space in the Old Gen to promote objects from the young one. When this happens the CMS logs a concurrent mode failure and does a stop-of-the-world single-threaded full GC
+* Promotion failed -> happens when the CMS started a minor Gc assuming the old Gen has enough space and indeed it has but it is too fragmented and then the promotion of objects fails. When this happens CMS, in the middle of the minor gc (which is stop-of-the-world) will perform a full collection and compact the old gen (this is the most costy operation, the pause is really long)
+
+Tune CMS to avoid concurrent mode failure
+* CMS threads starts cleaning the Old Generation when it is 70% filled up. For that time on, it is a race between these threads and the time the Application takes to fill up the remaining 30%. If the App is faster, CMS will have a concurrent mode failure. Tunning can be done to attempt to avoid this:
+    * Increase the heap size
+    * Change the rate between young and old generation
+    * Run the background cleaner threads more often
+        * -XX:CMSInitiatingOccupancyFraction=N and -XX:+UseCMSInitiatingOccupancyOnly
+    * Increase number of cleaner threads
+        * -XX:ConcGCThreads=N
+………………………………………………………………………………………………………………………………………………………
+Understanding the G1 Collector (144)
+__________________________________________________________________________________________________________________
+
+G1 - “Garbage First” collector
+Strategy:
+* Divide the heap into multiple regions - by default, 2048
+* Any region can belong to the young or the old generation and the generational regions need not to be contiguous
+* Some regions will have more garbage than the others and when the concurrent background threads scans the regions, it detects those who have more garbage and later G1 will collect those first - “Garbage First”.
+* Cleaning a region is a stop-of-the-world operation but as G1 can work just by region, it can reduce a lot the pause times and gain performance
+* For minor GC, these rules doesn’t apply: when this happens the entire young generation is freed or promoted - which means all young generation regions are cleanup in a single operation. The young generation is still divided by reagions though, and that happens because it is easier to resize the generations that way.
+
+4 main operations:
+* A Minor GC
+* A Background, concurrent cycle
+    * Goal: 
+        * Scan the regions and mark those with more garbage. Additionally, perform some minor cleanups.
+    * Phases:
+        * Initial-mark phase (stop-of-the-world)
+            * Usually starts at the same time as an minor GC() happens. This is because as this phase is also stop-of-the-world, G1 schedules this phase to run within a young GC cycle run to reduce the number of stop-of-the-world pauses. The costs of adding this phase to a minor gc run are low.
+        * concurrent-root-region-scan phase
+            * Scans the root region
+        * concurrent-mark phase
+        * Remark phase (stop-of-the-world)
+        * Cleanup phase (stop-of-the-world)
+        * Concurrent-cleanup phase
+* A Mixed GC
+    * Goal
+        * Perform a minor GC
+        * Cleanup a portion of the regions of the Old Gen with more garbage
+        * Compact the heap by moving live data between regions
+        * Adjust survivor spaces
+* If needed, a full GC
+
+
+How G1 works:
+* At some minor GC cycle, if needed, G1 binds also a background concurrent cycle starting. This cycle will start by the time of the minor gc and will scan the regions of the heap and mark those with more garbage.
+* Next, by each minor GC cycle, G1 will execute a mixed GC instead, that in practice is the minor GC plus cleaning up a portion of the regions of the old Generation with more garbage and compacting
+* After n mixed GC cycles, eventually all the marked regions have been cleaned up -or almost - and when this happens, G1 resumes the regular young GC cycles.
+* Eventually G1 will later detect the heap needs to be cleaned again and will schedule another background concurrent cycle to start and so on.
+* A well-tuned JVM running G1 should only experience young, mixed and concurrent GC cycles, with very small pauses in the concurrent cycles.
+
+Problems
+* Concurrent mode failure
+    * Happens when the old generation fills up meanwhile a marking cycle is happening and before it finishes. Then G1 aborts the concurrent-mark phase and a full GC is executed.
+    * To solve this, the heap should be increased - either by increasing the whole heap size or tuning the ratio between young and old generation - , or the G1 background processing must begin sooner or the cycle must be tuned to run more quickly (more threads)
+* Promotion failure
+    * Happens when G1 has completed a marking cycle and has started performing mixed GCs to clean up old regions but the old generation runs out of space before enough memory can be reclaimed from it. In the log, a full GC immediately follows a Mixed GC, stating the reason as “Allocation Failure"
+    * To solve this, the mixed collections need to happen more quickly: each young collection needs to process more regions in the old one.
+* Evacuation failure
+    * When performing a young collection, there isn’t enough room in the survivor spaces and the old generation to store all surviving objects. The GC log shows a “to-space overflow” hint. This indicates that the heap is largely full or fragmented and in that cases the G1 will end up running a full GC.
+    * To solve this, one can increase the heap size or perform some other tunnings
+* Humongous allocation failure
+    * Happens when applications allocate very large objects and that can trigger a full GC. There are no hints In the log to clearly identify this kind of problem, the only one is to see a pattern of full GCs happening for no apparent reason.
+
+Tunning G1
+* Overall automatic tuning => -XX:MaxGCPauseMillis=N
+    *  This flag has a default value of 200ms. If pauses for any of the stop-the-world phases of G1 start to exceed that value, G1 will attempt to compensate automatically: adjusting the young-to-old ratio, the heap size, starting the background processing sooner, changing the tenuring threshold and - most significantly - processing more or fewer old generation regions during a mixed GC cycle
+    * Tradeoffs:
+        * If the value is reduced, the young size will contract to meet the pause time goal, but more frequent young GCs will be performed. In addition, the number of old generation regions cleaned up in each Mixed GC pause will decrease to meet the goal, which means more risk of having concurrent mode failures.
+* Individual configuration tuning
+    * Tunning G1 background threads => ParallelGCThreads / ConcGCThreads
+    * Tuning G1 to run more (or less) frequently => -XX:initiatingHeapOccupancyPercent=N (default value = 45)
+        * The G1 cycle starts once the heap hits the occupancy ration specified by this flag.
+        * If this value is too high, the application will end up performing full GCs because it starts too late to clean and will have concurrent mode failures.
+        * If this value is too low, the application will perform more background GC processes than necessary, consuming more CPU cycles, although this may not be a problem as those CPU cycles must be available anyway and would be IDLE otherwise. The problem of doing this is, in fact, the augmentation of the small pauses for those concurrent phases that stop the application threads, as they will run much more frequently.
+    * Tuning G1 mixed GC cycles
+        * The amount of work a mixed GC does depends on three factors:
+            * How many regions were found to be mostly garbage in the first place. A region is declared eligible for GC once it is 35% garbage and there is currently no way to configure this threshold.
+            * Max number of GC cycles over which G1 will process collect garbage regions
+                * configured by the flag -XX:G1MixedGCCountTarget=N (default value = 8 )
+                * Reducing the value means that G1 should collect old generation regions in less cycles and can help overcome promotion failures at the expense of more work for each cycle (longer pause time in each cycle)
+                * Augmenting that value means G1 will do less work in each cycle so each cycle will be faster, but will need more cycles to clean up old generation regions, which can increase the risk of having concurrent mode failures if G1 cleaning doesn’t keep up with heap occupation increasing rate.
+            * Maximum desired length of a GC pause
+                * Configured by the flag -XX:MaxGCPauseMillis=N
+                * Even if the value specified in the flag G1MixedGCCountTarget is reached, if time is available in that Mixed GC cycle and more regions are to be cleaned, G1 will attempt o clean them until the max desired GC pause limit is reached.
+                * Increasing this limit lead G1 to collect more regions in each Mixed GC pause which results of cleaning the heap faster at the cost of having longer pauses, but reducing the risk of having concurrent mode failures and allowing G1 to begin the next concurrent cycle sooner. Remember that G1 can only begin the next concurrent cycle - scan the heap and mark garbage regions - once a certain threshold of the already marked regions are cleaned up.
+
+………………………………………………………………………………………………………………………………………………………
+
+Tenuring Threshold (152)
+* Limit of GC cycles an object can stay in the young generation (Eden space, s0 or s1) before being moved to the old generation.
+* Tunning: -XX:InitialTenuringthreshold=N
+    * By default, 7 for Throughput and G1 collectors
+    * By default, 6 for CMS
+* Tunning: -XX:MaxTenuringThreshold=N
+    * By default, 15 for Throughput and G1 collectors
+    * By default, 6 for CMS
+
+An object is moved from young generation to the old generation when:
+* It’s tenuring threshold is reached
+* Young generation space runs out 
+* The target survivor space an object was about to be moved into, on the young gereration, runs out. When that happens, the object is moved to the old generations directly, instead.
+
+To tune this behaviour, one can tune:
+* The survivor spaces sizes: -XX:InitialSurvivorRatio=N 
+    * survivor_space_size = newSize / (initial_survivor_ratio + 2)
+* The maximum survivor space size: -XX:MinSurvivorRation=N
+    * Maximum_survivor_space_size = newSize / (min_survivor_ratio + 2)
+    * Default value of ration is 3, with means that by default the maximum size of survivor spaces is 20% of the young generation size. 
+* More details at page 152
+
+TLAB: Thread Local Allocation Buffer (156)
+* Space in the Eden space, allocated for each garbage collection thread to allocate objects. This allows to faster object allocation as the objects doesn’t need to be allocated directly on the general heap space, which will enforce synchronisation between all gc threads.
+* A gc thread allocates the objects to it’s TLAB unless the TLAB size - that is configurable - is exceeded. When that happens, either it allocates the object directly in the heap or the TLAB is cleaned up - objects are moved to the general heap region or promoted to S0, S1 or even to old gen - and the object is stored in the cleaned up TLAB.
+* Best tool to analyse TLAB and outside TLAB allocation: Java Flight Recorder (JFR)
+
+………………………………………………………………………………………………………………………………………………………
+
+G1 region size:
+* The size of each G1 region within the heap
+* Is calculated at startup and depends on the minimum heap size (-Xms flag value)
+* It is the minimum value between 1MB and the log(initial_heap_size / 2048)
+* Can be set with the flag -XX:G1HeapRegionSize=N
+
+Situations where resizing G1 regions matter: 
+* G1 region Size and Humoungus objects
+    * G1 will allocate humoungus objects (very large objects) directly to the old generation when their size is greater than a region (they doesn’t fit in a region after all). This is bad because it prevents the objects to be collected in a young gc cycle, so if some of those objects are short lived, the performance of the application will suffer with that.
+    * When the application generates very large objects, G1 region size should be redefined according with that, so they fit in the regions
+* Very large heap range: eg: -Xms2G -Xmx32G
+    * When the heap range is very large, it means that the app will start in the lower value for the heap size and can scale up to the largest one, if necessary. The problem is that the region size is based on the initial value and in the end the heap can end up with a huge number or regions to be processed by G1, that is designed to process an ideal number of regions close to 2048.
+    * Increasing the region size can make G1 more efficient for those cases: select a value so that there will be close to 2048 regions at the expected heap size of the application
+
+G1 allocation for humongous objects (161)
+* G1 considers an object to be humongous if it will fill more than 50% of a region alone. If the object, for example, has 524,304 bytes of size, to not be considered humongous and be dealt with as a normal object, the region size should be at least 1.1MB - as it is always a power of 2, it has to be then defined to 2MB. Otherwise the object will be directly allocated to old gen.
+* Another example: If the region size is 1MB and the application creates an array of 1,5MB, G1 will not be able to store it in a single young generation region. 
+* Instead, it will find two contiguous old generation regions to store the array.
+* If the array is a 3.1MB array, G1 will need to find 4 contiguous regions, and so on.
+* Some problems raise from this:
+    * G1 will at sometimes need to perform a full gc with compaction in order to find x contiguous regions available to store large objects
+    * This defeats the way G1 normally performs compaction, which is by freeing arbitrary regions based on how full they are.
+    * Because the large objects are allocated directly in the old generation, they cannot be freed during a young collection, and if they are short-lived this also defeats the generational design of the collector. Instead, they will be collected during the concurrent G1 cycle.
+
+Garbage Collectors Configuration Summary FAQ (164)
+* Can your application tolerate full GC pauses?
+    * If so, then the throughput collector will offer the best performance, while using less CPU and a smaller heap than other collectors. 
+    * If not, then choose a concurrent collector:
+        * For smaller heaps, either CMS or G1 (depends on how small is the heap)
+        * For larger heaps, G1
+* Are you getting the performance you need with the default settings?
+    * Try default settings first
+    * As GC technology matures, the ergonomic (automatic) runnings gets better all the time
+    * If you are not getting the performance you need, make sure that GC is your problem. Look at GC logs, see how much time you are spending in GC and how frequently long pauses occur. For a busy application, if you are spending 3% or less time in GC, you are not going to get a lot out of running (though you can always try and reduce outliers if that is your goal)
+* Are the pause times that you have somewhat close to your goal?
+    * If they are, then adjusting the maximum pause time may be all you need
+    * Otherwise, then you need to do something else:
+        * If your pause times are too large but your throughput is OK, you can reduce the size of the young generation (and for full gc pauses, the old generation). You will get more, but shorter, pauses.
+* Is throughput lagging even through GC pause times are short?
+    * You can increase the size of the heap (or at least the young generation). More isn’t always better: bigger heaps lead to longer pause times. Even with a concurrent collector, a bigger heap means a bigger young generation by default, so you will see longer pause times for young collections. But if you can, increase the heap size or at least the relative sizes of the generations.
+* Are you using a concurrent collector and seeing fulll GCs due to concurrent-mode failures?
+    * If you have available CPU, try increasing the number of concurrent GC threads or starting the background sweep sooner by adjusting the InitiatingHeapOccupancyPercent flag. 
+    * For G1, the concurrent cycle won’t start if there are pending mixed GCs; try reducing the mixed GC count target.
+* Are you using a concurrent collector and seeing full GCs due to promotion failures?
+    * In CMS, a promotion failure indicates that the heap is fragmented. There is little to do about that; Using a larger heap and/or performing the background sweep sooner can help in some cases. It may be better to try G1 instead
+    * In G1, an evacuation failure (to-space overflow) indicates essentially the same thing, but the fragmentation can be solved if G1 performs it’s background sweeping sooner and mixed GCs faster. Try increasing the number of concurrent G1 threads, adjusting the initiatingHeapOccupancyPercent or reducing the mixed GC count target.
+
+………………………………………………………………………………………………………………………………………………………
+
+Heap Memory Best Practices (166)
+
+Tools to analyse the heap
+* Heap Analysis
+    * Useful to analyse the heap
+    * Ex: gc logs, jvisualvm, etc
+* Heap Histograms
+    * Useful to verify in a very fast way the number of live instances in the heap, by class
+    * Ex: jcmd <process_id> GC.class_histogram
+        * An histogram with the number of instances by class but performs a full gc first in order to exclude from the report the dead objects, i.e, the ones eligible for GC.
+    * Ex: jcmd <process_id> GC.class_histogram -all
+        * An histogram with the number of instances by class, including dead objects.
+    * Ex: jmap -histo <process_id>
+        * An histogram with the number of instances by class, including dead objects.
+    * Ex: jmap -histo:live <process_id>
+        * Similar to the previous command output but performs a full gc first in order to exclude from the report the dead objects, i.e, the ones eligible for GC.
+* Heap dumps
+    * Deeper analysis of the heap
+    * Generate from the command line
+        * jcmd <process_id> GC.heap_dump /path/to/heap_dump.hprof
+        * jmap -dump:live, file=path/to/heap_dump.hprof <process_id>
+    * Tools to read heap dumps
+        * jhat
+            * Original heap dump analyzer tool
+            * Reads the heap dump and runs a small HTTP server that lets you look at the dump through a series of web page links
+        * jvisualvm
+            * the monitor tab can take an heap dump from a running program or open a previously produced heap dump. From threre, you can browse through the heap and running arbitrary queries against it
+        * mat
+            * The opensource EclipseLink Memory Analyzer Tool (mat) can load one or more heap dumps and perform analysis on them. It can suggest where problems are likely to be found and it too can be used to browse through the heap and execute SQL-like queries into the heap.
+
+
+
+Concept terms (170)
+* Retained memory of an object
+    * Is the amount of memory that would be gained if that object is eligible for GC. This includes the memory occupied by the object and also the one of any other objects that would then be DEAD objects if that object was collected (e.g: objects which the unique reference to them is from the object we are analysing)
+* Shallow size of an object
+    * The size of the object itself
+    * If the object includes references to another object, the size of the reference is included, but not the size of the referenced object
+* Deep size of an object
+    * Is the shallow size of the object plus the size of it’s referenced objects.
+* Retained memory vs Deep Size
+    * The difference between those is that shared objects (objects referenced by the one being analyzed but also from at least another live object) are included in the deep size of the object being analyzed but not in the retained memory of it, because those would not be automatically considered elligible for GC once the object is removed as they will continue to have references for other(s) live objects.
+
+Out of Memory Errors
+* The JVM throws an out of memory error under these circumstances:
+    * No native memory is available for the JVM
+    * The permgen (java 7 or earlier) or metaspace (java 8 or later) is out of memory
+    * The Java heap itself is out of memory: the application has too many live objects for the given heap size
+    * The JVM is spending too much time performing GC (GC overhead limit exceeded)
+        * Happens when all the following conditions are met:
+            * the amount of time spent in a full GC exceeds the value specified by -XX:GCTimeLimit=N (default = 98 => 98% of time is spent in GC)
+            * the amount of memory reclaimed by a full GC is less than the value specified by -XX:GCHeapFreeLimit=N (default = 2 => if less than 2% of the heap is freed during full GC, the error is thrown)
+            * The above conditions have held true for five consecutive full GC cycles
+            * The value of -XX:+UseGCOverheadLimit flag is TRUE (which it is, by default)
+
+
+Flag
+Description
+-XX:+HeapDumpOnOutOfMemoryError
+Turning on this flag (default value = false) will cause the JVM to create a heap dump whenever an out of memory error is thrown
+-XX:HeapDumpPath=<path>
+Defines the location where the heap dump will be written. Default location is java_pid<pid>.hprof in the application’s current working directory
+-XX:+HeapDumpAfterFullGC
+Generates a heap dump after running a full GC
+-XX:+HeapDumpBeforeFullGC
+Generates a heap dump before running a full GC
+
+How to use less Memory
+* Reduce object size
+* Lazy initialization of objects
+* Eager deinitialization (just mentioned to be avoided, see bellow)
+* Using Immutable and canonical objects
+
+
+Reduce Object size
+
+One can reduce the object size by reducing the size of it’s instance variables. The size of instance variables is present in the following table:
+
+
+Type
+Size
+byte
+1
+char
+2
+short
+2
+int
+4
+float
+4
+long
+8
+double
+8
+reference
+4 ou 32-bit JVM and 64-bit JVMs with heaps less than 32GB;
+
+8 on 64-bit JVM with large heaps.
+The reference type here is the reference to any kind of Java object - instances of classes or arrays. That space is the storage only for the reference itself. The size of an object that contains references to other objects varies depending on wether we wanto to consider the shallow, deep or retained size of the object, but the size also includes some invisible object header fields.
+
+For the regular object, the size of the header fields is 8 bytes on a 32-bit JVM (regardless of the heap size). 
+
+For an array, the size is 16 bytes on a 32-bit JVM or a 64-bit JVM with a heap of less than 32GB and 24 bytes otherwise.
+
+
+Example:
+
+public class A {
+    private int i;
+}
+
+public class B {
+    private int i;
+    private Locale l = Locale.US;
+}
+
+public class C {
+    private int i;
+    private ConcurrentHashMap chm = new ConcurrentHashMap();
+}
+
+The actual sizes of a single instance of these objects on a 64-bit Java 7 JVM with a heap size less than 32GB is the following:
+
+
+Class
+Shallow size
+Deep size
+Retained Size
+A
+16
+16
+16
+B
+24
+216
+24
+C
+24
+200
+200
+
+In class B, defining the Locale reference adds 8 bytes to the object size, but at least in that example, the actual Locale object is shared among other classes - that’s why the retained size is only the size of B instance itself.
+
+If the Locale object is never actually needed by the class, including some instance variable will waste only the additional bytes for the reference. Still, those bytes add up if the application creates a lot of instances of class B.
+
+On the other hand, defining and creating a ConcurrentHashMap consumed additional bytes for the object reference plus an additional of 200 bytes for hashmap object. If it is never used, instances of class C are quite wasteful.
+
+Note:
+* The total size of an instance is the base size plus the size of it’s instances types.
+* Even an class without any attributes occupies a base size, that is platform dependent. That’s why the total size of instances of class A is not just 4 bytes. And because of padding (see bellow) by stating that their size is 16 bytes, it doesn’t necessarily means that the base size is 12 bytes for this case. In fact, it means that the base size plus the 4 bytes of the reference falls somewhere between 9 and 16 bytes.
+* Object’s sizes are always padded so that they are a multiple of 8 bytes.
+* Without the definition of i in class A, instances of A still consume 16 bytes - the 4 bytes are just used for padding the object size to a multiple of 8 rather than being used to holding the reference to i.
+* Without the definition of i, instances of class B would consume only 16 bytes (same as A), even though B as that extra object reference.
+* That padding is also why an instance of B is 8 bytes larger than an instance of A even though it contains only one additional reference (4 bytes).
+
+
+Trick:
+* Defining only required instance variables is one way to save space in an object
+* If a class needs to keep track of one of eight possible states, it can do so using a byte better than an int, potentially saving 3 bytes. Using float instead of double, int instead of long and so on helps to save memory, specially in classes that are frequently instantiated.
+
+
+Lazy initialization (180)
+
+Consider using lazy initialization over heavy variables that are expected to be used only during sporadic occasions during the program execution. By lazy initializing them, one can ensure they only occupy space after being really needed by the first time.
+
+Lazy initialization in a multi threaded context may lead do the need of coding synchronization logic though (see page 180 onwards to analyze some cool techniques and view a good pattern here: the double checked locking).
+
+
+Eager deinitialization (181)
+
+The corolary to lazy initializing variables is eagerly deinitializing them by setting their value to null once they are not needed anymore. That allows the object in question to be collected more quickly by the garbage collector. While that sounds like a good thing in theory, it is really useful only in limited circumnstances.
+
+If you have an instance variable that is heavy and you decided to lazy initializing it, it can look as a good candidate to eager deinitialization also. However, if the variable isn’t going to be used in subsequent invocations of the method (or elsewhere in the class), there is no reason to make it an instance variable in the first place: simply create the local variable in the method and when the method completes, the local variable will fall out of scope and the garbage collector can free it.
+
+Immutable and Canonical Objects
+
+One optimization that is often possible when handling immutable objects is to avoid creating duplicate copies of the same object.
+
+A canonical object is a singular representation of an Immutable Object. For example, for the Boolean class, despite one can create infinite istances of it, any one of them can either be true or false. In fact, Boolean.TRUE and Boolean.FALSE are the canonical versions of Boolean class.
+
+One way of reducing the memory footprint of all instances of a specific class is to canonicalize it, i.e., work with canonical objects only as it’s instances.
+ This can be achieved by, for example, doing something like this:
+
+public class ImmutableObject{
+    WeakHashMap<ImmutableObject, ImmutableObject> map = new WeakHashMap();
+
+    public ImmutableObject canonicalVersion(ImmutableObject io){
+        synchronized(map){
+            ImmutableObject canonicalVersion = map.get(io);
+            if(canonicalVersion == null){
+                map.put(io, io);
+                canonicalVersion = io;
+            }
+            return canonicalVersion;
+        }
+    }    
+}
+
+Summary regarding canonical objects:
+* Objects that are immutable offer the possibility of special lifecycle management: canonicalization
+* Eliminating duplicate copies of immutable objects via canonicalization can greatly decrease the amount of heap an application uses
+
+
+String interning (185)
+
+Because String is the most common Java Object, any application heap is almost certainly filled with them. If a large number of those strings are the same, then a large part of the heap would be wasted. Since Strings are immutable, there is never any reason to have more than one String representing the same sequence of characters.
+
+Calling String.intern() method stores the String in the String pool. The goal of the String pool is precisely to store the canonical representations of the String class within an application, promoting the reuse of those instances instead of creating always a brand new one each time the programmer instantiates a new String.
+
+One way to know if you have a large number of duplicated Strings is to load a heap dump in the Eclipse Memory Analyser, calculate the retained size of all String objets and list those sorted by their maximum retained size. If the same String appears multiple times in the list and occupies a large retained size, interning it can be benefical. 
+
+Please note that interning strings should not be done arbitrarily, as interning many strings would cause a loose in the performance when creating new Strings, as the String Pool is formed by a fixed-size hashTable - the number of buckets is fixed and defined at initialization and cannot be extended - so after a certain number of Strings stored in the pool, collisions starts to occur which leads to a degradation of the performance adding and searching Strings within the pool.
+
+Starting with java7, the size of the String pool hash table can be defined by the flag -XX:StringTableSize=N (which defaults for 1009 to versions before java7u40 and 60,013 in 64 bit versions of java7u40 and later). When overriding the flag, a prime number should be choosen as the String intern table will operate most efficiently that way.
+
+To analyze the String pool of the JVM and verify if it should be tunned, proceed the following way:
+* Run the application with -XX:+PringStringTableStatistics argument
+* After JVM exits, it will print out a table containing the String Table statistics (see bellow an example)
+* If the Average bucket size is not between 0 and 1, the size of the String table needs to be increased
+* The total number of interned Strings an application has allocated and their total size can also be obtained using jmap command:
+    * jmap -heap <process_id>
+
+
+Ex: String table statistics when there are 3,035,072 interned strings and only 1009 buckets, with an average of 3008 Strings per bucket.
+
+Number of buckets: 1009
+Average bucket size: 3008
+Variance of bucket size: 2870
+Std. dev. of bucket size: 54
+Maximum bucket size: 3186
+
+Ex: jmap -heap <process_id> output:
+
+… other output …
+31361 interned Strings occupying 3247040 bytes.
+
+Hint: As the penalty for setting the size of the String table too high is minimal - each bucket takes only 4 or 8 bytes depending if you have 32 or 64 bit JVM - having a few thousand more entries than optimal is a one-time cost of a few kilobytes of native (not heap) memory.
+
+
+How Object pools and Object reuse impacts GC performance (187)
+
+Object pools and Object reuse, if abused, can be an hammer for the GC performance as those objects will stay arround in the old generation for a long time, reducing the performance of full gc operations, specially in the compaction steps (or mark phase for concurrent collectors).
+
+Consider defining object pools when the cost of initialization overcomes the penalty of having them arround in the heap, or for the cases when you are replacing a the creation of a lot of equal objects by the use of their canonical representation.
+
+Performance: Object pools vs Thread Local variables
+
+Object Pool
+*     Disliked for many reasons, only some of which have to do with performance. They can be difficult to size correctly, and they place the burden of object management back on the programmer: rather than simply letting an object go out of scope, the programmer must remember to return the object to the pool.
+* But there are also performance impacts with object pools:
+    * GC impact: 
+        * Holding lots of objects reduces - sometimes quite drastically - the efficiency of GC
+    * Synchronization: 
+        * Pools of objects are inevitably synchronized and if the objects are frequently removed and replaced, the pool can have a lot of contention. The result is that access to the pool can become slower than initializing a new object
+    * Throttling: 
+        * This performance impact of pools can be beneficial: pools allow access to a scarce resources to be throttled. If you attempt to increase load on a system beyhond what it can handle, performance will decrease. This is one reason thread pools are important. If too many threads run simultaneously, the CPUs will be overwhelmed and performance will degrade. This principle applies to remote systems as well, and is frequently seen with JDBC connections. If more JDBC connections are made to a database than it can handle, performance of the database will degrade. In those situations, it is better to throttle the number of resources (e.g., JDBC connections) by capping the size of the pool - even if it means that threads in the application must wait for a free resource.
+
+Thread Local Variables
+
+* There are different performance trade-offs when reusing objects by storing them as thread local variables:
+    * Lifecycle management: 
+        * Much more easier and less expensive to manage than objects in a pool. Both techniques require you to obtain the initial object but thread local variables needn’t to be explicitly returned by the programmer after using them, as opposite to what happens with object pool.
+    * Cardinality:
+        * Thread local variables usually end up with a one-to-one correspondence between the number of threads and the number of saved (reused) objects. On the other hand, an object pool may be sized arbitrarily. If a servlet sometimes needs one JDBC connection and sometimes needs two, the JDBC pool can be sized accordingly (with, say, 12 connections for 8 threads). Thread-local variables cannot do this effectively; nor can they throttle access to a resource, unless the number of threads itself serves as a throttle.
+    * Synchronization:
+        * Thread local variables needs no synchronization sicne they can obly be used within a single thread. Also, the thread-local get() method to obtain the variable is relatively fast. Using thread local objects is a very good way to avoid synchronization bottlenecks between different threads when calling a shared resource, and it can have a very positive impact in the performance of the application.
+
+Lesson: When initialization of objects take a long time, don’t be afraid to explore object pooling or thread-local variables to reuse those expensive-to-create objects. As always, though, strike a balance: large object pools of generic classes will most certainly lead to more performance issues than hey solve. Leave these techniques to classes that are expensive to initialize and when the number of reused objects will be small.
+
+
+Weak, Soft and Other References (193)
+* Quick Summary
+    * Indefinite (soft, weak, phantom and final) references alter the ordinary lifecycle of java objects, allowing them to be reused in ways that may be more GC-friendly than pools or thread local variables.
+    * Weak references should be used when an application is interested in an object only if that object is strongly referenced elsewhere in the application
+    * Soft references hold onto objects for possibly long periods of time, providing a simple GC-friendly LRU (Least Recently Used) cache.
+    * Indefinite references consume their own memory and hold onto memory of other objects for long periods of time. They should be used sparingly.
+* Terminology
+    * Reference
+        * A reference (or object reference) is any kind of reference: strong, weak, soft, phantom, and so on. An ordinary instance variable that refers to an object is a strong reference.
+    * Indefinite reference
+        * This is the term used to distinguished between a strong reference and other, special kinds of references (e.g., soft or weak). An indefinite reference is actually an instance of an object (e.g., an instance of the SoftReference class)
+    * Referent
+        * Indefinite references work by embedding another reference (almost always a strong reference) within an instance of the indefinite reference class. The encapsulated object is called the referent.
+
+Soft references (195):
+* Should be used when the object in question has a good change of being reused in the future, but you want to let the garbage collection reclaim the object if it hasn’t been used very recently and/or very low memory is available in the heap after a full GC.
+* Are essentially one large, least recently used - LRU - object pool.
+* Soft references are freed when the referent is not strongly referenced elsewhere. If the soft reference is the only remaining reference to it’s referent, the referent is freed during the next GC cycle only if the soft reference has not recently been accessed.
+* If the JVM runs out of memory or starts thrashing too severely, it will clear all soft references, since the alternative would be to throw an OutOfMemoryError.
+* The use of soft references leads to additional memory being allocated within the heap, as the reference itself also occupies some space.
+* The caution here is not to use too many soft references, since they can easily fill up the entire heap. This caution is even stronger than the caution against creating an object pool with too many instances: soft references work well when the number of objects is not too large. Otherwise consider a more traditional object pool with a bounded size, implemented as a LRU cache.
+* Using a soft reference is like saying to the JVM: “Hey, try and keep this around as long as there is enough memory and as long as it seems that someone is occasionally accessing it"
+
+Weak references (197):
+* Should be used when the referent in question will be used by several threads simultaneously. Otherwise, the weak reference is too likely to be reclaimed by the garbage collector: objects that are only weakly referenced are reclaimed at every GC cycle.
+* When the strong references of an referent are removed, it’s weak references are immediatly freed.
+* The interesting effect here, though, is where the weak reference ends up in the heap. Reference objects are just like other Java objects: they are created in the young generation and eventually promoted to the old one. if the referent of the weak reference is freed while the weak reference itself is still in the young generation, the weak reference will be freed quickly at the next minor GC. On the other hand, if the referent remains around long enough for the weak reference to be promoted into the old generation, then the weak reference will not be freed until the next concurrent or full GC cycle happens.
+* Using a weak reference is like saying to the JVM: “Hey, as long as someone else is interesting in this object, let me know here it is, but if they no longer need it, throw it away and I will re-create it myself"
+
+………………………………………………………………………………………………………………………………………………………
+
+Chapter 8: Native Memory Best Practices (205)
+
+Total Footprint of an application: is the native memory (memory used by JVM for it’s internal operations or allocated programatically by calling JNI (Java Native Interface) operations
+
+Allocated vs Reserved Memory: Consider a heap that is specified with the parameters -Xms512m -Xmx2048m. The heap starts by using 512MB and it will be resized as needed to meet the GC goals of the application. That concept is the essential difference between commited (or allocated) memory and reserved memory (sometimes called the virtual size of a process). The operation system promises to the JVM that, when it attempts to allocate additional memory when it increases the size of the heap, that memory will be available.
+
+Minimize footprint by reducing:
+* heap size
+* Thread stacks
+* code cache
+* direct byte buffers
+
+Native memory tracking: Beginning with java8, the JVM allows some visibility into how it allocates native memory by using this option: -XX:NativeMemoryTracking=off/summary/detail
+
+With the above flag in summary or detail mode, one can get the native memory information at any time from jcmd:
+
+%jcmd process_id VM.native_memory summary
+
+Other way is to start the JVM with the argument -XX:+PrintNMTStatistics and the JVM will print out information about the allocation of native memory when the program exits.
+
+
+Native memory tracking over time
+NMT allows you to track how memory allocations occur over time. After the JVM is started with NMT enabled, you can establish a baseline for memory usage with this command:
+
+%jcmd process_id VM.native_memory baseline
+
+That causes the JVM to markt its current memory allocations. Later, you can compare the current memory usage to that mark:
+
+%jcmd process_id VM.native_memory summary.diff
+
+
+Performance of Java applications can be also increased by:
+* Using large pages for long-running java applications, specially with large heaps (212)
+* Take advantage of compressed OOPs JVM feature, by choosing heaps no larger than 32GB, because JVM will be more performant for those due to the compress OOP (Object reference pointer) feature being only activated until 32GB heap size (216)
+
+………………………………………………………………………………………………………………………………………………………
+
+Chapter 9. Threading and Synchronization Performance (219)
+
+How a ThreadPool works?
+Tipically, there are 1…n task queues and a thread pool, started with a certain number of threads (minThreads). When tasks are added to the queue, those tasks are picked up by available threads, until no more threads are available in the queue. How the thread pool is increased depends on the strategy defined to create more threads (see bellow).
+
+Q: How to set the maximum number of threads in a thread pool? What is the optimal number of threads to be defined for, for instance, an application with four CPUs available?
+A:
+* In theory, the ideal number is numThreads = num CPUs
+* If it is worthy to add more threads than the number of CPUs, it depends on the characteristics of the workload the application does:
+    * If the tasks are all compute-bound (CPU-bound) - they don´t make external network calls, nor to they have significant contention on an internal lock - the ideal number of threads in theory is exactly equal to the number of CPUs, no more, no less. Although, in that case, adding more threads without exagerating yealds minimal penalty.
+    * If the tasks does some I/O, for example - writing to a database or filesystem, calling some API over the network, etc, the tasks may not be CPU bound but I/O bound. In that case, adding more threads will be much worse.
+    * As conclusion, a performance engineer should always view the system as a whole. If the system is composed with multiple components - VMs, physical machines, etc - the fact that one of them as CPU available doesn’t mean that more threads can be added to it, as it may scale but if the bottleneck of the entire system is another component that receives requests from it and is, for istance, CPU-bound, the overral performance of the whole system may drop as a whole. (see page 223 for a good example).
+
+Q: How to set the minimum number (or core number) of threads?
+A: It should be exactly equal to the maximum number of threads. Despite the argument stating that each thread consumes system resources, which is true, a system should be configured from start to be able to handle the max workload predicted, which is done when the maximum number of threads is reached. If it is unable to do it, when it happens and it needs those threads, it will go down. So, better thing to do is to start already with all threads in place and ensure the system can handle it.
+
+
+Sizing and configuring a ThreadPoolExecutor
+
+The general behaviour for a thread pool is that it starts with a minimum number of threads, and if a task arrives when all existing threads are busy, a new thread is started, up to the maximum number of threads, and the task is executed immediately. Otherwise, the task is queued, unless there is some large number of pending tasks already, in which case the task is rejected. But, depending on the configuration, the thread pool can behave quite differently.
+
+A ThreadPoolExecutor decides when to start a new thread based on the type of the queue used to hold the tasks. There are three possibilities:
+
+* SynchronousQueue
+    * When the executor uses a synchronous queue, the thread pool behaves as expected with respect to the number of threads: new tasks will start a new thread if all existing threads are busy and if the pool has less than the number of maximum threads. However, this queue as no way to hold pending tasks: if a task arrives and the maximum number of threads is already busy, the task is always rejected. So this is a good choice for managing a small number of tasks, but otherwise may be unsuitable. The documentation for this class suggests specifying a very large number for the maximum thread size, which may be OK if the tasks are completely CPU-bound, but can be conterproductive in other situations.
+* Unbounded queues
+    * When the executor uses an unbounded queue, such, for example, the LinkedBlockingQueue, no task will ever be rejected, since the queue size is unlimited. In this case, the executor will only use at most the number of threads specified by the core (minimum) thread pool size: the maximum pool size is ignored. If the core and maximum pool size has the same value, this choice comes closest of the operation of traditional thread pool configured with a fixed number of threads.
+* Bounded queues
+    * Executors that use a bounded queue (e.g, an ArrayBlockingQueue) employ a quite complicated alghorithm to determine when to start a new thread. For example, say the pool’s core size is 4, it’s maximum size is 8 and the maximum size of the ArrayBlockingQueue is 10. As tasks arrive and are placed in the queue, the pool will run a maximum of 4 threads (the core pool size). Even if the queue completely fills up - so that it is holding 10 pending tasks, the executor will use only 4 threads.
+    * An additional thread will only be started when the queue is full and a new task is added to the queue. Instead of rejecting the task (since the queue is full), the executor starts a new thread. That new thread runs the first task on the queue, making room for the pending task to be added to the queue.
+    * In this example, the only way the pool will end up with 8 threads (maximum pool size), is if there are 7 tasks in progress, 10 tasks in the queue and a new task is added to the queue.
+    * The idea behind this alghorithm is that the pool will operate with only the core threads most of the time, even if a moderate number of tasks are in the queue waiting to be run. That allows the pool to act as throttle, which is advantageous. If the backlog of requests become too great, the pool then attempts to run more threads to clear out the backlog, subject to a second throttle, the maximum number of threads.
+
+There are many arguments for and against of these choices, but when attempting to maximize performance, this is a time to apply the KISS principle: keep it simple, stupid. Specify that the ThreadPoolExecutor has the same core and maximum number of threads and utilize a LinkedBlockingQueue to hold the pending tasks (if an unbounded task list is appropriate) or an ArrayBlockingQueue if a bounded task list is appropriate.
+
+
+
+The ForkJoinPool
+
+Java 7 introduces a new thread pool: the ForkJoinPool class. This class looks just like any other thread pool: like the ThreadPoolExecutor class, it implements the Executor and ExecutorService interfaces. When those interfaces are used, the ForkJoinPool uses an internal unbounded list of tasks that will be run by the number of threads specified in the constructor, or the number of CPUs on the machine if the no-args constructor is used)
+
+The ForkJoinPool class is designed to work with divide-and-conquer alghoritms: those where a task can be recursively broken into subsets. The subsets can then be processed io parallel, and then the results from each subset are merged into a single result. The classic example is the quicksort alghorithm.
+
+The important point of divide and conquer alghorithms is that they create a lot of tasks that must be managed by relatively few threads. Say that we want to sort an array of 10 million elements. We start by creating separate tasks to perform three operations: sort the subarray containing the first 5 million elements, sort the subarray containing the remaining 5 million elements and then merge the two subarrays.
+
+The sorting of the 5 million subarrays are done again by sorting subarrays of 2.5 million elements and merging those arrays. This recursion continues until at some point (e.g, when a subarray contains only 10 elements), when it is more efficient to use insertion sort on the array and sort it directly. 
+
+In the end, therew ill be more than 1 million tasks to sort the leaf arrays. More than 500.000 tasks are needed to merge those sorted arrays, 250.000 tasks to merge the next set of sorted arrays, and so on. In the end, there will be 2.097,151 tasks. 
+
+The larger point here is that none of the tasks can complete until the tasks that they have spawned has completed, which menas that it isn’t possible to perform that alghorithm efficiently using a ThreadPoolExecutor because the parent task must wait for it’s child tasks to complete. A thread inside a ThreadPoolExecutor cannot add another task to the queue and then wait for it to finish: once the thread is waiting, it cannot be used to execute one of the subtasks.
+
+The ForkJoinPool, on the other hand, allows it’s threads to create new tasks and then suspend their current task. While the task is suspended - because to be completed it depends on the completion of child thread’s tasks - the parent thread can execute other pending tasks.
+
+For code example, see page 231.
+
+What trade-offs are there between ForkJoinPool and ThreadPoolExecutor classes?
+
+First and foremost is that the suspension implemented by the fork/join paradigm allows all tasks to be executed by only few threads. For instance, counting the double values in an array of 10 million elements using the example code in page 231 creates more than 2 million tasks, but those tasks can be easily executed by only few threads (even one, if that makes sense for the machine running the test). 
+
+Running a similar algorithm using a ThreadPoolExecutor would require more than 2 million threads, since each threead would have to wait for it’s subtasks to complete, and those subtasks could only complete if there were additional threads available in the pool. So the fork/join suspension allows us to use algorithms that we otherwise could not, wich is a performance win.
+
+However, while divide-and-conquer techniques are very powerful, overusing them can yield worse performance. In the counting example, a single thread can scan and count the array, through that won’t necessarily be as fast as running the fork/join algorithm in parallel. However, it would be easy enough to partition the array into chunks and use a ThreadPoolExcutor to have multiple threads scan the array: Page 231 contains an example of splitting the array in 4 and using a ThreadPoolExecutor with 4 threads to scan the 4 subarrays in parallel. That code fully utilizes all CPUs while avoiding creating and queuing the 2 million tasks used by the fork/join example, which means better performance.
+
+An additional feature of the ForkJoinPool is that implements work-stealing.
+Each thread in the pool has it’s own queue of tasks it has forked. Threads will preferentially work on tasks from their own queue but if that queue runs empty they will steal tasks from the queues of other threads. The upshot is that even if one of the 2 million tasks takes a long time to execute, other threads in the ForkJoinPool can complete any and all of remaining tasks. 
+
+The same is not true for the ThreadPoolExecutor: if one of it’s tasks requires a long time, other threads cannot pick additional work.
+
+When all tasks in an execution needs the same time - or almost - to be performed, we say the tasks are BALANCED. Otherwise, they are UNBALANCED. The conclusion here is that it is recomended to use ThreadPoolExecutor with partitioning for better performance when the tasks are balanced, otherwise ForkJoinPool will give better performance for unbalanced tasks due to the “work-steal” feature.
+
+
+JAVA 8 Automatic Parallelization
+
+
