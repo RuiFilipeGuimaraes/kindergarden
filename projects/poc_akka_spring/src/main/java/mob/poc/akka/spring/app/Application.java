@@ -31,8 +31,8 @@ public class Application {
     }
 
     @RequestMapping("/getData")
-    public String searchData(@RequestParam String id) {
-        return repository.retrieve(id).map(data -> serializer.toJson(data)).orElse("404 NOT FOUND");
+    public String searchData(@RequestParam String key) {
+        return repository.retrieve(key).map(data -> serializer.toJson(data)).orElse("404 NOT FOUND");
     }
 
     @RequestMapping("/putData")

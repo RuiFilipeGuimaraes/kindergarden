@@ -5,5 +5,7 @@ mob/poc/akka/spring/app/factory/api/Factory.class
 mob/poc/akka/spring/app/persistence/SampleDataRepository.class
 mob/poc/akka/spring/app/persistence/RedisSampleDataRepository.class
 mob/poc/akka/spring/app/model/SampleData.class
+mob/poc/akka/spring/app/configuration/KafkaTopicConfiguration.class
+mob/poc/akka/spring/app/model/SampleData$Builder.class
 mob/poc/akka/spring/app/Application.class
 mob/poc/akka/spring/app/factory/impl/JedisFactory.class
