@@ -1,0 +1,2 @@
+docker pull swaggerapi/swagger-ui
+docker pull spotify/kafka

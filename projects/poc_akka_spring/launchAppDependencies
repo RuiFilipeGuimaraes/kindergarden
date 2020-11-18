@@ -1,3 +1,2 @@
 docker run -p 2181:2181 -p 9092:9092 --name kafka-poc-akka --env ADVERTISED_HOST=kafka-poc-akka --env ADVERTISED_PORT=9092 spotify/kafka &
 docker run -p 6379:6379 --name redis-poc-akka -d redis redis-server --appendonly yes &
-docker run -p 8080:8080 -t image_poc_akka_spring --link redis-poc-akka:redis --link kafka-poc-akka:kafka &

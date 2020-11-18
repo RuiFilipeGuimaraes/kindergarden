@@ -1,0 +1,2 @@
+kafka-console-producer.sh --broker-list 127.0.0.1:9092 --topic data
+kafka-console-consumer --zookeeper 127.0.0.1:2181 --topic test

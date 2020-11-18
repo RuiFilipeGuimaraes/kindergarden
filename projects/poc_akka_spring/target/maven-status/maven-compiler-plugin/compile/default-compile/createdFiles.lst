@@ -1,1 +1,9 @@
+mob/poc/akka/spring/app/integration/kafka/Consumer.class
+mob/poc/akka/spring/app/configuration/SpringFoxConfig.class
+mob/poc/akka/spring/app/integration/kafka/Producer.class
+mob/poc/akka/spring/app/factory/api/Factory.class
+mob/poc/akka/spring/app/persistence/SampleDataRepository.class
+mob/poc/akka/spring/app/persistence/RedisSampleDataRepository.class
+mob/poc/akka/spring/app/model/SampleData.class
 mob/poc/akka/spring/app/Application.class
+mob/poc/akka/spring/app/factory/impl/JedisFactory.class

@@ -1,1 +1,1 @@
-docker run -p 6379:6379 --name redis-postal-codes -d redis redis-server --appendonly yes &
+docker run -p 6379:6379 --name redis-poc-akka -d redis redis-server --appendonly yes &

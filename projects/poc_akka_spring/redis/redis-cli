@@ -1,1 +1,1 @@
-docker run -it --name my-redis-cli --link redis-postal-codes:redis --rm redis redis-cli -h redis -p 6379
+docker run -it --name my-redis-cli --link redis-poc-akka:redis --rm redis redis-cli -h redis -p 6379

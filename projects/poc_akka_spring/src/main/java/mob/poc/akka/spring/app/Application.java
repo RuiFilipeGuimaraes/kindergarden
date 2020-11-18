@@ -1,6 +1,8 @@
 package mob.poc.akka.spring.app;
 
 import com.google.gson.Gson;
+import mob.poc.akka.spring.app.model.SampleData;
+import mob.poc.akka.spring.app.persistence.SampleDataRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
@@ -18,6 +20,9 @@ import java.util.Arrays;
 public class Application {
 
     @Autowired
+    private SampleDataRepository repository;
+
+    @Autowired
     private Gson serializer;
 
     @RequestMapping("/")
@@ -25,9 +30,20 @@ public class Application {
         return "Hello to POC AKKA SPRING";
     }
 
-    @RequestMapping("/status")
-    public String searchPostalAddress(@RequestParam String postalCode, @RequestParam String userId) {
-        return "OK";
+    @RequestMapping("/getData")
+    public String searchData(@RequestParam String id) {
+        return repository.retrieve(id).map(data -> serializer.toJson(data)).orElse("404 NOT FOUND");
+    }
+
+    @RequestMapping("/putData")
+    public String putData(SampleData content) {
+        try {
+            repository.add(content);
+        } catch (Exception e) {
+            return "500 NOT OK. error: " + e.getMessage();
+        }
+
+        return "200 OK";
     }
 
     public static void main(String[] args) {
