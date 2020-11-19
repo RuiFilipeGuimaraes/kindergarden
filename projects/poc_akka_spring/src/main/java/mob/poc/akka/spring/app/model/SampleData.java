@@ -59,6 +59,10 @@ public class SampleData {
         return new Builder();
     }
 
+    public String getPartition() {
+        return partition;
+    }
+
     public static class Builder {
         private String info;
         private int sequenceNumber;

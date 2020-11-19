@@ -1,12 +1,13 @@
 package mob.poc.akka.spring.app.persistence;
 
 import mob.poc.akka.spring.app.model.SampleData;
+import org.springframework.stereotype.Repository;
 
-import java.util.Optional;
+import java.util.List;
 
 public interface SampleDataRepository {
-    void add(SampleData sampleData);
+    void save(SampleData sampleData);
 
-    Optional<SampleData> retrieve(String key);
+    List<SampleData> retrieveByPartition(String partition);
 
 }

@@ -2,29 +2,18 @@ version: "3"
 networks:
   common_network:
     driver: bridge
-  default:
-    driver: bridge
 services:
   redis:
     image: redis
-    networks:
-      - common_network
-      - default
     ports:
     - "6379:6379"
   zookeeper:
     image: confluentinc/cp-zookeeper:latest
-    networks:
-      - common_network
-      - default
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
   kafka:
     image: confluentinc/cp-kafka:latest
-    networks:
-      - common_network
-      - default
     depends_on:
       - zookeeper
     ports:

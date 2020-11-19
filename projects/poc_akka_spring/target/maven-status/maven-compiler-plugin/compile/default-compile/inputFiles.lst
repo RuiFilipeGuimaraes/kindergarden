@@ -1,4 +1,5 @@
 /Users/ruiguimaraes/software/git/kindergarden/projects/poc_akka_spring/src/main/java/mob/poc/akka/spring/app/model/SampleData.java
+/Users/ruiguimaraes/software/git/kindergarden/projects/poc_akka_spring/src/main/java/mob/poc/akka/spring/app/controller/SampleDataController.java
 /Users/ruiguimaraes/software/git/kindergarden/projects/poc_akka_spring/src/main/java/mob/poc/akka/spring/app/factory/api/Factory.java
 /Users/ruiguimaraes/software/git/kindergarden/projects/poc_akka_spring/src/main/java/mob/poc/akka/spring/app/factory/impl/JedisFactory.java
 /Users/ruiguimaraes/software/git/kindergarden/projects/poc_akka_spring/src/main/java/mob/poc/akka/spring/app/configuration/KafkaTopicConfiguration.java
@@ -7,4 +8,3 @@
 /Users/ruiguimaraes/software/git/kindergarden/projects/poc_akka_spring/src/main/java/mob/poc/akka/spring/app/persistence/SampleDataRepository.java
 /Users/ruiguimaraes/software/git/kindergarden/projects/poc_akka_spring/src/main/java/mob/poc/akka/spring/app/configuration/SpringFoxConfig.java
 /Users/ruiguimaraes/software/git/kindergarden/projects/poc_akka_spring/src/main/java/mob/poc/akka/spring/app/Application.java
-/Users/ruiguimaraes/software/git/kindergarden/projects/poc_akka_spring/src/main/java/mob/poc/akka/spring/app/integration/kafka/Producer.java

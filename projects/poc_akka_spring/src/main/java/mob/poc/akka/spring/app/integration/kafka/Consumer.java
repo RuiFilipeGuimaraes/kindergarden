@@ -3,14 +3,11 @@ package mob.poc.akka.spring.app.integration.kafka;
 import mob.poc.akka.spring.app.model.SampleData;
 import mob.poc.akka.spring.app.persistence.SampleDataRepository;
 import org.apache.kafka.clients.admin.NewTopic;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.kafka.support.KafkaHeaders;
-import org.springframework.messaging.handler.annotation.Header;
-import org.springframework.messaging.handler.annotation.Payload;
-import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -26,18 +23,16 @@ public class Consumer {
     private SampleDataRepository repository;
 
     @KafkaListener(topics = "${topic.name.consumer}", containerFactory = "kafkaListenerContainerFactory")
-    public void consume(@Payload String message,
-                        @Header(KafkaHeaders.RECEIVED_PARTITION_ID) int partition,
-                        @Header(KafkaHeaders.MESSAGE_KEY) String messageKey,
-                        @Header(KafkaHeaders.OFFSET) String offset,
-                        @Header(KafkaHeaders.RECEIVED_TIMESTAMP) String receivedTimestamp) throws IOException {
-        logger.info(String.format("#### -> Consumed message with key=%s, partition=%s, offset=%s. Message -> %s", messageKey, partition, offset, message));
+    public void consume(ConsumerRecord<String, String> consumerRecord) throws IOException {
+        logger.info(String.format("#### -> Consumed message with key=%s, partition=%s, offset=%s. Message -> %s",
+                consumerRecord.key(), consumerRecord.partition(), consumerRecord.offset(), consumerRecord.value()));
 
-        repository.add(SampleData.newBuilder()
-                .withInfo(message)
-                .withKey(messageKey)
-                .withOffset(offset)
-                .withReceivedTimestamp(receivedTimestamp)
+        repository.save(SampleData.newBuilder()
+                .withInfo(consumerRecord.value())
+                .withKey(consumerRecord.key())
+                .withOffset(String.valueOf(consumerRecord.offset()))
+                .withReceivedTimestamp(String.valueOf(consumerRecord.timestamp()))
+                .withPartition(String.valueOf(consumerRecord.partition()))
                 .build());
     }
 }

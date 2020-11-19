@@ -6,7 +6,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 import redis.clients.jedis.Jedis;
 
-import java.util.Optional;
+import java.util.List;
+import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
@@ -22,13 +23,22 @@ public class RedisSampleDataRepository implements SampleDataRepository {
         this.serializer = gson;
     }
 
+    /**
+     * Adds the data to the list of messages for the same partition, assuring that writing order is maintained
+     *
+     * @param sampleData
+     */
     @Override
-    public void add(SampleData sampleData) {
-        jedis.lpush(String.valueOf(sampleData.getSequenceNumber()), serializer.toJson(sampleData));
+    public void save(SampleData sampleData) {
+        jedis.lpush(sampleData.getPartition(), serializer.toJson(sampleData));
     }
 
     @Override
-    public Optional<SampleData> retrieve(String key) {
-        return Optional.ofNullable(jedis.get(key)).map(dataStr -> serializer.fromJson(dataStr, SampleData.class));
+    public List<SampleData> retrieveByPartition(String partition) {
+        final long length = jedis.llen(partition);
+        return jedis.lrange(partition, 0, length)
+                .parallelStream()
+                .map(str -> serializer.fromJson(str, SampleData.class))
+                .collect(Collectors.toList());
     }
 }

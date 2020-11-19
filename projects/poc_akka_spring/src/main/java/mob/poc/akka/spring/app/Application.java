@@ -1,16 +1,11 @@
 package mob.poc.akka.spring.app;
 
-import com.google.gson.Gson;
-import mob.poc.akka.spring.app.model.SampleData;
-import mob.poc.akka.spring.app.persistence.SampleDataRepository;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Arrays;
@@ -19,32 +14,11 @@ import java.util.Arrays;
 @RestController
 public class Application {
 
-    @Autowired
-    private SampleDataRepository repository;
-
-    @Autowired
-    private Gson serializer;
-
     @RequestMapping("/")
     public String home() {
         return "Hello to POC AKKA SPRING";
     }
 
-    @RequestMapping("/getData")
-    public String searchData(@RequestParam String key) {
-        return repository.retrieve(key).map(data -> serializer.toJson(data)).orElse("404 NOT FOUND");
-    }
-
-    @RequestMapping("/putData")
-    public String putData(SampleData content) {
-        try {
-            repository.add(content);
-        } catch (Exception e) {
-            return "500 NOT OK. error: " + e.getMessage();
-        }
-
-        return "200 OK";
-    }
 
     public static void main(String[] args) {
         SpringApplication.run(Application.class, args);
