@@ -1,6 +1,10 @@
 kafka-console-producer.sh --broker-list 127.0.0.1:9092 --topic data
 kafka-console-consumer --zookeeper 127.0.0.1:2181 --topic test
 
+kafka-consumer-groups --list --bootstrap-server localhost:9092
+kafka-consumer-groups --describe --group poc_akka_spring --bootstrap-server localhost:9092
+
+
 docker network ls
 docker network connect <networkId> <containerId>
 docker run -it --name my-redis-cli --link poc_akka_spring_redis_1:redis --rm redis redis-cli -h redis -p 6379

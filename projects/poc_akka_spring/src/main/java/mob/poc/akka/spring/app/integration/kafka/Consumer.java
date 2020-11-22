@@ -1,5 +1,6 @@
 package mob.poc.akka.spring.app.integration.kafka;
 
+import mob.poc.akka.spring.app.akka.actor.result.OperationResult;
 import mob.poc.akka.spring.app.integration.akka.AkkaSystemImpl;
 import mob.poc.akka.spring.app.model.Record;
 import mob.poc.akka.spring.app.model.SampleData;
@@ -14,6 +15,9 @@ import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 @Service
 public class Consumer {
@@ -27,6 +31,8 @@ public class Consumer {
 
     @Autowired
     private SampleDataRepository repository;
+
+    private final Map<String, Record> recordsOnTransitMap = new HashMap<>();
 
     @KafkaListener(topics = "${topic.name.consumer}", containerFactory = "kafkaListenerContainerFactory")
     public void consume(ConsumerRecord<String, String> consumerRecord,
@@ -46,18 +52,20 @@ public class Consumer {
                 .build();
 
         final Record record = new Record(consumerRecord.topic(), String.valueOf(consumerRecord.offset()), acknowledgment, message);
+        this.recordsOnTransitMap.put(record.getKey(), record);
 
-        akkaSystem.processRecord(record);
-
-        /*
-        repository.save(SampleData.newBuilder()
-                .withInfo(consumerRecord.value())
-                .withKey(messageIdentificationKey)
-                .withOffset(String.valueOf(consumerRecord.offset()))
-                .withReceivedTimestamp(String.valueOf(consumerRecord.timestamp()))
-                .withPartition(String.valueOf(consumerRecord.partition()))
-                .build());
-         */
+        CompletableFuture<Object> future = akkaSystem.processRecord(record);
+        future.whenComplete((result, throwable) -> {
+            if (result instanceof OperationResult) {
+                if (((OperationResult) result).isSuccess()) {
+                    final Record processedRecord = recordsOnTransitMap.get(((OperationResult) result).getMessageKey());
+                    logger.info("OFFSET COMMIT. {} ", record.getOffsetInfo());
+                    acknowledgment.acknowledge();
+                }
+            } else {
+                logger.error("Received a result that is not of the supporte type");
+            }
+        });
     }
 
     @PostConstruct
