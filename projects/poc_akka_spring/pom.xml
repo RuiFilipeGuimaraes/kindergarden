@@ -15,6 +15,8 @@
 
     <properties>
         <java.version>1.8</java.version>
+        <akka.version>2.6.10</akka.version>
+        <scala.binary.version>2.13</scala.binary.version>
     </properties>
 
     <dependencyManagement>
@@ -89,6 +91,17 @@
         <dependency>
             <groupId>org.springframework.kafka</groupId>
             <artifactId>spring-kafka</artifactId>
+        </dependency>
+        <!-- AKKA -->
+        <dependency>
+            <groupId>com.typesafe.akka</groupId>
+            <artifactId>akka-actor_2.13</artifactId>
+            <version>${akka.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.typesafe.akka</groupId>
+            <artifactId>akka-actor-typed_2.13</artifactId>
+            <version>${akka.version}</version>
         </dependency>
     </dependencies>
 
