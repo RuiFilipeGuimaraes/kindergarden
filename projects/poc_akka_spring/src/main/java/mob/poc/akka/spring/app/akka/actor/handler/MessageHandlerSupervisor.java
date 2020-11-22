@@ -7,6 +7,7 @@ import akka.actor.SupervisorStrategy;
 import mob.poc.akka.spring.app.akka.actor.BaseActor;
 import mob.poc.akka.spring.app.akka.actor.contract.Command;
 import mob.poc.akka.spring.app.akka.actor.domain.HealthStatus;
+import mob.poc.akka.spring.app.akka.actor.result.OperationResult;
 
 import java.time.Duration;
 
@@ -19,15 +20,17 @@ public class MessageHandlerSupervisor extends BaseActor {
 
     public MessageHandlerSupervisor(int partition) {
         this.childRef = getContext().actorOf(MessageHandlerActor.props(partition), String.format("MessageHandler%s", partition));
+        getContext().watch(childRef);
     }
 
     @Override
     public Receive createReceive() {
-        return receiveBuilder()
+        return baseReceiveBuilder()
                 .match(Command.class, this::onCommand)
                 .matchAny(message -> {
                     log().info(String.format("I am %s. Forwarding message to child. childRef=%s, childPath=%s, message=%s",
                             getContext().getSelf().path().name(), childRef, childRef.path().name(), message));
+                    log().info(String.format("Forwarding message to child: %s", childRef));
                     childRef.forward(message, getContext());
                 })
                 .build();
@@ -44,6 +47,11 @@ public class MessageHandlerSupervisor extends BaseActor {
 
     public static Props props(final int partition) {
         return Props.create(MessageHandlerSupervisor.class, partition);
+    }
+
+    @Override
+    protected void onForwardingResult(OperationResult result) {
+        childRef.forward(result, getContext());
     }
 
     @Override

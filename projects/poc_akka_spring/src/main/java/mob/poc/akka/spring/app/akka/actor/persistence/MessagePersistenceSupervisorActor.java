@@ -1,23 +1,33 @@
-package mob.poc.akka.spring.app.akka.actor.handler;
+package mob.poc.akka.spring.app.akka.actor.persistence;
 
 import akka.actor.ActorRef;
+import akka.actor.OneForOneStrategy;
 import akka.actor.Props;
+import akka.actor.SupervisorStrategy;
 import mob.poc.akka.spring.app.akka.actor.BaseActor;
-import mob.poc.akka.spring.app.akka.actor.contract.Command;
 import mob.poc.akka.spring.app.akka.actor.contract.Message;
 import mob.poc.akka.spring.app.akka.actor.domain.HealthStatus;
-import mob.poc.akka.spring.app.akka.actor.persistence.MessagePersistenceSupervisorActor;
 import mob.poc.akka.spring.app.akka.actor.result.OperationResult;
 import mob.poc.akka.spring.app.model.SampleData;
 
-public class MessageHandlerActor extends BaseActor {
+import java.time.Duration;
 
-    private int counter = 0;
+import static akka.actor.SupervisorStrategy.makeDecider;
+
+public class MessagePersistenceSupervisorActor extends BaseActor {
+    private int partition;
     private ActorRef childRef;
+    private static int MAX_NR_RETRIES = 10;
 
-    public MessageHandlerActor(final int partition) {
-        this.childRef = getContext().actorOf(MessagePersistenceSupervisorActor.props(partition),
+    public MessagePersistenceSupervisorActor(int partition) {
+        this.partition = partition;
+        this.childRef = getContext().actorOf(MessagePersistenceActor.props(partition).withDispatcher("blocking-dispatcher"),
                 String.format("MessagePersistence%s", partition));
+    }
+
+    @Override
+    protected HealthStatus checkHealth() {
+        return HealthStatus.HEALTHY;
     }
 
     @Override
@@ -25,21 +35,22 @@ public class MessageHandlerActor extends BaseActor {
         return baseReceiveBuilder()
                 .match(Message.class, this::onMessage)
                 .match(SampleData.class, this::onMessage)
-                .match(Command.class, this::onCommand)
-                .matchAny(this::onDefaultMessage)
                 .build();
     }
 
     private void onMessage(Object message) {
         log().info(String.format("I am %s and just received a message: %s", getContext().getSelf().path().name(), message));
-        counter++;
-        log().info("Increased Counter " + counter);
         log().info(String.format("Forwarding message to child: %s", childRef));
         childRef.forward(message, getContext());
     }
 
-    private void onDefaultMessage(Object messageObject) {
-        log().warning("Received an unknown message type!");
+    @Override
+    public SupervisorStrategy supervisorStrategy() {
+        return new OneForOneStrategy(
+                MAX_NR_RETRIES,
+                Duration.ofSeconds(10),
+                makeDecider(ex -> SupervisorStrategy.Restart$.MODULE$)
+        );
     }
 
     @Override
@@ -47,15 +58,7 @@ public class MessageHandlerActor extends BaseActor {
         childRef.forward(result, getContext());
     }
 
-    /**
-     * Factory method to create the actor
-     */
     public static Props props(final int partition) {
-        return Props.create(MessageHandlerActor.class, partition);
-    }
-
-    @Override
-    protected HealthStatus checkHealth() {
-        return HealthStatus.HEALTHY;
+        return Props.create(MessagePersistenceSupervisorActor.class, partition);
     }
 }

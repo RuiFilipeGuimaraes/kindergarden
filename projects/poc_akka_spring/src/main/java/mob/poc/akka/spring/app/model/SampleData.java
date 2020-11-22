@@ -63,6 +63,10 @@ public class SampleData {
         return partition;
     }
 
+    public String getKey() {
+        return key;
+    }
+
     public static class Builder {
         private String info;
         private int sequenceNumber;
@@ -108,5 +112,7 @@ public class SampleData {
             return new SampleData(info, sequenceNumber, partition, offset, receivedTimestamp, key);
         }
     }
+
+
 
 }
