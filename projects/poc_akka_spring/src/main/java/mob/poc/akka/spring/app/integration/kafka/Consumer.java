@@ -45,7 +45,7 @@ public class Consumer {
                 .withPartition(String.valueOf(consumerRecord.partition()))
                 .build();
 
-        final Record record = new Record(consumerRecord.topic(), acknowledgment, message);
+        final Record record = new Record(consumerRecord.topic(), String.valueOf(consumerRecord.offset()), acknowledgment, message);
 
         akkaSystem.processRecord(record);
 

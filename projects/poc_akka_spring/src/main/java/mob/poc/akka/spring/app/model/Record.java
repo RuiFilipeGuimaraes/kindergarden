@@ -10,12 +10,12 @@ public class Record {
     private final String partition;
     private final String offset;
 
-    public Record(String topic, Acknowledgment acknowledgment, SampleData data) {
+    public Record(String topic, String offset, Acknowledgment acknowledgment, SampleData data) {
         this.acknowledgment = acknowledgment;
         this.data = data;
         this.key = String.format("K_%s_%s_%s", data.getPartition(), data.getSequenceNumber(), System.currentTimeMillis());
         this.partition = data.getPartition();
-        this.offset = String.valueOf(data.getSequenceNumber());
+        this.offset = offset;
         this.topic = topic;
     }
 

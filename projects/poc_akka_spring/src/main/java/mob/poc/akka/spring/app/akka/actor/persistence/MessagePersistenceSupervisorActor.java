@@ -21,8 +21,13 @@ public class MessagePersistenceSupervisorActor extends BaseActor {
 
     public MessagePersistenceSupervisorActor(int partition) {
         this.partition = partition;
+        this.childRef = getContext().actorOf(MessagePersistenceActor.props(partition),
+                String.format("MessagePersistence%s", partition));
+        /*
         this.childRef = getContext().actorOf(MessagePersistenceActor.props(partition).withDispatcher("blocking-dispatcher"),
                 String.format("MessagePersistence%s", partition));
+
+         */
     }
 
     @Override
