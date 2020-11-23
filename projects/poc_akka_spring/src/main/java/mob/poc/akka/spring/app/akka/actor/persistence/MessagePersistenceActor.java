@@ -31,7 +31,7 @@ public class MessagePersistenceActor extends BaseActor {
     public MessagePersistenceActor(final int partition) {
         this.partition = partition;
         this.messages = new ArrayList<>();
-        this.childRef = getContext().actorOf(NotifierActor.props(partition), String.format("Notifier%s", partition));
+        this.childRef = getContext().actorOf(NotifierActor.props(), String.format("Notifier%s", partition));
     }
 
     @Override
@@ -50,6 +50,7 @@ public class MessagePersistenceActor extends BaseActor {
 
     private OperationResult persist(SampleData sampleData) {
         try {
+            //throw new Exception("JUST FAILED");
             repository.save(sampleData);
             log().info("Data successfully saved in the DB. key={}", sampleData.getKey());
             return new SuccessFulOperationResult(sampleData.getKey());
