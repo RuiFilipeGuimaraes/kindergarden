@@ -2,7 +2,6 @@ package mob.poc.akka.spring.app.akka.actor.persistence;
 
 import akka.actor.ActorRef;
 import akka.actor.Props;
-import com.google.gson.Gson;
 import mob.poc.akka.spring.app.akka.actor.BaseActor;
 import mob.poc.akka.spring.app.akka.actor.contract.Command;
 import mob.poc.akka.spring.app.akka.actor.contract.Message;
@@ -12,26 +11,28 @@ import mob.poc.akka.spring.app.akka.actor.result.FailureOperationResult;
 import mob.poc.akka.spring.app.akka.actor.result.OperationResult;
 import mob.poc.akka.spring.app.akka.actor.result.SuccessFulOperationResult;
 import mob.poc.akka.spring.app.model.SampleData;
-import mob.poc.akka.spring.app.persistence.RedisSampleDataRepository;
 import mob.poc.akka.spring.app.persistence.SampleDataRepository;
-import redis.clients.jedis.Jedis;
+import org.springframework.beans.factory.config.ConfigurableBeanFactory;
+import org.springframework.context.annotation.Scope;
+import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
 
+@Component
+@Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 public class MessagePersistenceActor extends BaseActor {
-
-    private final int partition;
     private List<Message> messages;
     private ActorRef childRef;
 
     //TODO inject this dependency with spring
-    private SampleDataRepository repository = new RedisSampleDataRepository(new Jedis(), new Gson());
+    //private SampleDataRepository repository = new RedisSampleDataRepository(new Jedis(), new Gson());
+    private final SampleDataRepository repository;
 
-    public MessagePersistenceActor(final int partition) {
-        this.partition = partition;
+    public MessagePersistenceActor(SampleDataRepository repository) {
         this.messages = new ArrayList<>();
-        this.childRef = getContext().actorOf(NotifierActor.props(), String.format("Notifier%s", partition));
+        this.childRef = getContext().actorOf(NotifierActor.props(), String.format("Notifier%s", System.currentTimeMillis()));
+        this.repository = repository;
     }
 
     @Override

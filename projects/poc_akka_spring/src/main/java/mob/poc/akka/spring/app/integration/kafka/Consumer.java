@@ -1,7 +1,7 @@
 package mob.poc.akka.spring.app.integration.kafka;
 
 import mob.poc.akka.spring.app.akka.actor.result.OperationResult;
-import mob.poc.akka.spring.app.integration.akka.AkkaSystemImpl;
+import mob.poc.akka.spring.app.akka.AkkaSystemImpl;
 import mob.poc.akka.spring.app.model.Record;
 import mob.poc.akka.spring.app.model.SampleData;
 import mob.poc.akka.spring.app.persistence.SampleDataRepository;
@@ -63,7 +63,7 @@ public class Consumer {
                     acknowledgment.acknowledge();
                 }
             } else {
-                logger.error("Received a result that is not of the supporte type");
+                logger.error("Received a result that is not of the supported type. result:" + result.getClass());
             }
         });
     }

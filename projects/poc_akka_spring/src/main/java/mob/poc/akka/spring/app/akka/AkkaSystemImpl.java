@@ -1,12 +1,14 @@
-package mob.poc.akka.spring.app.integration.akka;
+package mob.poc.akka.spring.app.akka;
 
 import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
 import akka.actor.Props;
 import mob.poc.akka.spring.app.akka.actor.handler.MessageHandlerSupervisor;
+import mob.poc.akka.spring.app.akka.actor.AkkaSpringExtension;
 import mob.poc.akka.spring.app.model.Record;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -24,9 +26,10 @@ public class AkkaSystemImpl implements AkkaSystem {
     private final Map<Integer, ActorRef> messageHandlerMap;
     private final ActorSystem actorSystem;
 
-    public AkkaSystemImpl() {
+    public AkkaSystemImpl(ApplicationContext applicationContext) {
         logger.info("Initializing AKKA system...");
         this.actorSystem = ActorSystem.create("myActorSystem");
+        AkkaSpringExtension.AKKA_SPRING_EXTENSION_PROVIDER.get(actorSystem).initialize(applicationContext);
         this.messageHandlerMap = new HashMap<>();
     }
 

@@ -1,4 +1,4 @@
-package mob.poc.akka.spring.app.integration.akka;
+package mob.poc.akka.spring.app.akka;
 
 import mob.poc.akka.spring.app.model.Record;
 

@@ -13,16 +13,20 @@ import mob.poc.akka.spring.app.model.SampleData;
 import java.time.Duration;
 
 import static akka.actor.SupervisorStrategy.makeDecider;
+import static mob.poc.akka.spring.app.akka.actor.AkkaSpringExtension.AKKA_SPRING_EXTENSION_PROVIDER;
 
 public class MessagePersistenceSupervisorActor extends BaseActor {
-    private int partition;
     private ActorRef childRef;
     private static int MAX_NR_RETRIES = 10;
 
     public MessagePersistenceSupervisorActor(int partition) {
-        this.partition = partition;
+        /*
         this.childRef = getContext().actorOf(MessagePersistenceActor.props(partition),
                 String.format("MessagePersistence%s", partition));
+         */
+
+        this.childRef =getContext().actorOf(AKKA_SPRING_EXTENSION_PROVIDER.get(getContext().getSystem())
+                        .props(MessagePersistenceActor.class), String.format("MessagePersistence%s", partition));
         /*
         this.childRef = getContext().actorOf(MessagePersistenceActor.props(partition).withDispatcher("blocking-dispatcher"),
                 String.format("MessagePersistence%s", partition));
