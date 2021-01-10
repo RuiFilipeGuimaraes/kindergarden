@@ -63,6 +63,11 @@ ________________________________________________________________________________
 * Heap Memory Best Practices (166)
 * Native Memory Best practices (205)
 * ThreadPoolExecuter, Threading and Synchronization performance (219)
+* The ForkJoinPool (228)
+* Thread Synchronization, CAS vs CPU Synchronization approaches (236)
+* Amdahl's law (236)
+* Avoiding Synchronization (240)
+* Monitoring Threads and Locks (250)
 
 ………………………………………………………………………………………………………………………………………………………
 
@@ -637,7 +642,7 @@ There are many arguments for and against of these choices, but when attempting t
 
 
 
-The ForkJoinPool
+The ForkJoinPool (228)
 
 Java 7 introduces a new thread pool: the ForkJoinPool class. This class looks just like any other thread pool: like the ThreadPoolExecutor class, it implements the Executor and ExecutorService interfaces. When those interfaces are used, the ForkJoinPool uses an internal unbounded list of tasks that will be run by the number of threads specified in the constructor, or the number of CPUs on the machine if the no-args constructor is used)
 
@@ -663,7 +668,7 @@ Running a similar algorithm using a ThreadPoolExecutor would require more than 2
 
 However, while divide-and-conquer techniques are very powerful, overusing them can yield worse performance. In the counting example, a single thread can scan and count the array, through that won’t necessarily be as fast as running the fork/join algorithm in parallel. However, it would be easy enough to partition the array into chunks and use a ThreadPoolExcutor to have multiple threads scan the array: Page 231 contains an example of splitting the array in 4 and using a ThreadPoolExecutor with 4 threads to scan the 4 subarrays in parallel. That code fully utilizes all CPUs while avoiding creating and queuing the 2 million tasks used by the fork/join example, which means better performance.
 
-An additional feature of the ForkJoinPool is that implements work-stealing.
+An additional feature of the ForkJoinPool is that it implements work-stealing.
 Each thread in the pool has it’s own queue of tasks it has forked. Threads will preferentially work on tasks from their own queue but if that queue runs empty they will steal tasks from the queues of other threads. The upshot is that even if one of the 2 million tasks takes a long time to execute, other threads in the ForkJoinPool can complete any and all of remaining tasks. 
 
 The same is not true for the ThreadPoolExecutor: if one of it’s tasks requires a long time, other threads cannot pick additional work.
@@ -671,6 +676,88 @@ The same is not true for the ThreadPoolExecutor: if one of it’s tasks requires
 When all tasks in an execution needs the same time - or almost - to be performed, we say the tasks are BALANCED. Otherwise, they are UNBALANCED. The conclusion here is that it is recomended to use ThreadPoolExecutor with partitioning for better performance when the tasks are balanced, otherwise ForkJoinPool will give better performance for unbalanced tasks due to the “work-steal” feature.
 
 
-JAVA 8 Automatic Parallelization
+
+Thread Synchronization (236), CAS vs CPU Synchronization approaches
+
+The term thread synchronization is usually used to mention the situations when code is executing within a block where access to a set of variables appears serialized: only a single thread can access the memory. This includes:
+* code blocks protected by the synchronized keyword
+* code protected by an instance of java.util.concurrent.lock.Lock class
+* code within the java.util.concurrent and java.util.concurrent.atomic packages
+
+Strictly speaking, the atomic classes do not use synchronization, at least in CPU programming terms. Atomic classes use "Compare and Swap" (CAS) CPU instruction, while synchronization requires exclusive access to a resource. Threads that use CAS instructions will not block when simultaneously accessing the same resource, while a thread that needs a synchronization lock will block if another thread holds that resource.
+
+There are performance trade-offs between the two approaches. However, even though CAS instructions are lockless and nonblocking, they still exhibit most of the behavior of blocking constructs: their end result makes it appear to the developer that threads can only access the protected memory serially.
+
+
+Costs of synchronization
+
+Synchronized areas of code affect performance in two ways. First, the amount of time an application spends in a synchronized block affects the scalability of an application. Second, obtaining the synchronization lock requires some CPU cycles and hence affects performance.
+
+
+Synchronization and scalability
+
+When an application is split up to run on a multiple threads, the speedup it sees is defined by an equation known as Amdahl's law: 
+
+speedup = 1/( (1-P) + P/N )
+
+P is the amount of the program that is run in parallel
+N is the number of threads utilized, assuming that each thread always has available CPU
+
+So if 20% of the code exists in serialized blocks (meaning that P is 80%), with eight available CPUS the code can be expected to run only 3.33 times faster.
+
+One key fact about this equation is that as P decreases - that is, as more code is located within serialized blocks - the performance benefit of having multiple threads also decreases. That is why limiting the amount of code that lies in the serialized block is so important.
+
+
+Costs of locking objects (CPU synchronization vs CAS)
+
+Aside of it's impact on scalability, there are two basic costs to the operation of synchronization itself. 
+First, there is the cost of obtaining the synchronization lock. If a lock is uncontended - meaning that two threads are not attempting to access the lock at the same time - then this cost is quite minimal. There is a slight difference here between the synchronized keyword and CAS instructions. Uncontended synchronized locks are known as uninflated locks, and the cost of obtaining an uninflated lock is on the order of a few hundred nanoseconds. Uncontended CAS code will be an even smaller performance penalty.
+
+Contented constructs are more expensive. When a second thread attempts to access a synchronized lock, the lock becomes predictably inflated. This cost is fixed; the same amount of code is executed whether there are 2 or 20 threads attempting to access the same lock (all threads must execute the locking code, of course, so the cost does increase based on all number of threads, the point is that it is fixed on a per-thhread basis). 
+
+The cost for a contended operation in code using CAS instructions is unpredictable. CAS primitives are based on an optimistic stragegy: the thread sets a value, executes some code, and then makes sure that the initial value has not changed. If it has, then the CAS-based code must execute the code again. In the worst case, this means that two trheads could run into an infinite loop as each modifies the CAS-protected value, only to see that the other thread has modified it simultaneously. In practice, two threads are not going to get into an infinite loop like that, but as the number of threads contending for the CAS-based value increase, the number of retries increases.
+
+But if the operations are read-only, then CAS-based protection is not affected by contended access. For example, any number of threads may call the Atomic.get() method on the same object at the same time without paying any penalty for contention. This is another significant advantage to using CAS-based utilities.
+
+The second cost of synchronization is specific to Java and depends on the Java memory model. Java, unlike languages such as C++ and C, has a strict guarantee about the memory semantics around synchronization, and the guarantee applies to CAS-based protection, to traditional synchronization and to the volatile keyword.
+
+The purpose of synchronization is to protect access to values in memory - that is, to variables. Variables may be stored temporarily in registers, which is much more efficient than directly accessing them in main memory. Register values are not visible to other threads, the thread that modifies a value in a register must at some point flush that register to main memory so that other threads can see the value. The point when the register values must be flushed is dictated by thread synchronization.
+
+It is more complicated than that but the easiest way to think of this is that when a thread leaves a synchronized block, it must flush any modified variables to main memory. That means other threads that enter synchronized block will see the most recently updated values. Similarly, CAS-based protection ensures that variables modified during their operation are flushed to main memory, and a variable marked volatile is always consistently updated in main memory whenever it is changed.
+
+Summary:
+- Thread synchronization has two performance costs: it limits the scalability of an application and there is a cost obtaining locks
+- The memmory semantics of synchronization, CAS-based utilities and the volatile keyword can have a large performance impact, particularly on large machines with many registers.
+
+
+
+Avoiding Synchronization (240)
+
+The best thing to do to avoid having synchronization penalties is to avoid them. 
+The first approach is to use different objects in each thread - avoid shared mutable state - so that access to the objects will be uncontended. A good pattern to avoid sharing variables is to use a java.lang.ThreadLocal class to encapsulate them, creating a thread local variable. By using such variable, the total number of objects is limited - minimizing the effect in GC - and each object will never be subject to thread contention.
+The second approach to avoid synchronization is to use CAS-based alternatives. In some sense this isn't avoiding synchronization as much as solving the problem differently. But in this context, reducing the penalty for synchronization, it works out to have the same effect.
+
+
+Conclusions regarding using CAS-based utilities compared to traditional synchronization:
+- If access to a resource is uncontended, then CAS-based protection will be slightly faster than traditional synchronization (though no protection at all will be slightly faster still)
+- If access to a resource is lightly or moderated contended, CAS-based protection will be faster (often much faster) than traditional synchronization
+- As access to the resource becomes heavily contended, traditional synchronization will at some point become the more efficient choice. In practice, this occurs only on very large machines running a large number of threads
+- CAS-based protection is not subject to contention when values are read and not written.
+
+
+
+Monitoring Threads and Locks (250)
+
+When analyzing an application's performance for the efficiency of threading and synchronization, there are two things to look for: the overall number of threads (to make sure it is neither too high nor too low) and the amount of time threads spend waiting for a lock or other resource.
+
+Thread visibility
+Virtually every JVM monitoring tool provides information about the number of threads (and what they are doing). Interactive tools like jconsole show the state of threads within JVM. On the jconsole THreads panel, you can watch in real time as the number of threads increases and decreases during the execution of your program.
+
+Blocked Thread Visibility
+Real-time thread monitoring is useful for a very high-level picture of what threads are running in the application, but it doesn't really provide any data on what those threads are doing. Determining where the threads are spending CPU cyclies requires the use of a profiler. Profilers provide great visibility into what threads are executing and are generally sophisticated enough to guide you to areas in the code where beter algorithms and code choices can speed up overall execution. It is more difficult to diagnose threads that are blocked, although that information is often more important in the overall execution of an application, particularly if that code is running on a multi-CPU system and is not utilizing all the available CPU. There are three approaches to performing this diagnosis:
+- one approach is to use a profiler, since most profiling tools will provide a timeline of thread execution that allows you to see the points in time when a thread was blocked. One such tool is the JFR - Java Flight Recorder. We can drill down into events that JFR captures and look for those that are causing a thread to block (threads that are blocked waiting to acquire a monitor, or are waiting to read or, more rarely, to write data to a socket).
+
+
+
 
 
